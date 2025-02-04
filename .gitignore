@@ -1,0 +1,18 @@
+#Compiled Source#
+########################
+*.pyc
+
+
+#Directories To Ignore#
+#########################
+__pycache__/
+output_files/
+
+
+
+#OS Generated Files#
+#############################
+.DS_Store
+.idea
+
+
