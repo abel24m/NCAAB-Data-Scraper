@@ -1,5 +1,5 @@
 import string
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from difflib import SequenceMatcher
 
 from bovadaWebScraper import scrape_bovada
@@ -21,18 +21,49 @@ class ResultsData:
 
 @dataclass()
 class CoversData:
-    home : str = ""
-    away : str = ""
-    percent : str = ""
-    attempts : str = ""
-    more : str = ""
-    def_percent: str = ""
-    def_attempts: str = ""
-    def_more: str = ""
+    home: str = ""
+    away: str = ""
+    percent: float = ""
+    attempts: float = ""
+    more: float = ""
+    def_percent: float = ""
+    def_attempts: float = ""
+    def_more: float = ""
+    total_fields_won: int = 0
+    average_diff_fields: float = 0.0
+    total_data_fields= 6.0
     date : str = ""
 
 def similar(a : str , b : str ):
     return SequenceMatcher(None, a, b).ratio()
+
+def calculate_covers_winner (data : CoversData):
+    home_counter = 0
+    away_counter = 0
+    home_total = 0
+    away_total = 0
+    for field in fields(CoversData):
+        if field.type is float and  field.name != "average_diff_fields":
+            if float(getattr(data, field.name)) > 0:
+                home_counter += 1
+                home_total += getattr(data, field.name)
+            else:
+                away_counter += 1
+                away_total += abs(getattr(data, field.name))
+    winner = 0
+    if home_total > away_total:
+        data.total_fields_won = home_counter
+        winner = 1
+    else:
+        data.total_fields_won = away_counter * -1
+        winner = -1
+    average_diff = (abs(home_total - away_total) / data.total_data_fields) * winner
+    data.average_diff_fields = average_diff
+
+
+
+
+
 
 
 def build_final_file():
@@ -51,7 +82,7 @@ def build_final_file():
             result.date = res_words[6]
             results.append(result)
     mf = open("./output_files/final_results.csv" , "w")
-    headers = "Home, Away, Has-Metric Winner, H.M Cover By, Covers Percent, Covers Attempts, Covers More, Covers Def Percent, Covers Def Attempts, Covers Def More, Total Bet (Has), Total By (Has), Date\n"
+    headers = "Home, Away, Has-Metric Winner, H.M Cover By, Covers Percent, Covers Attempts, Covers More, Covers Def Percent, Covers Def Attempts, Covers Def More, Total Bet (Has), Total By (Has), Num Fields Won, Avg Diff, Date\n"
     mf.write(headers)
     cover_data = []
     with open("./output_files/coversScrape.csv" , "r") as f:
@@ -60,13 +91,14 @@ def build_final_file():
             data_split = line.split(", ")
             data.home = data_split[0]
             data.away = data_split[1]
-            data.percent = data_split[2]
-            data.attempts = data_split[3]
-            data.more = data_split[4]
-            data.def_percent = data_split[5]
-            data.def_attempts = data_split[6]
-            data.def_more = data_split[7]
+            data.percent = float(data_split[2])
+            data.attempts = float(data_split[3])
+            data.more = float(data_split[4])
+            data.def_percent = float(data_split[5])
+            data.def_attempts = float(data_split[6])
+            data.def_more = float(data_split[7])
             data.date = data_split[8]
+            calculate_covers_winner(data)
             found_match = False
             for r in results:
                 r_home = r.home.split("\t")[0]
@@ -77,14 +109,16 @@ def build_final_file():
                         r.away + ", " +
                         r.winner + ", " +
                         r.cover + ", " +
-                        data.percent + ", " +
-                        data.attempts + ", " +
-                        data.more + ", " +
-                        data.def_percent + ", " +
-                        data.def_attempts + ", " +
-                        data.def_more + ", " +
+                        str(data.percent) + ", " +
+                        str(data.attempts) + ", " +
+                        str(data.more) + ", " +
+                        str(data.def_percent) + ", " +
+                        str(data.def_attempts) + ", " +
+                        str(data.def_more) + ", " +
                         r.total_bet + ", " +
                         r.total_by + ", " +
+                        str(data.total_fields_won) + ", " +
+                        str(data.average_diff_fields) + ", " +
                         r.date
                               )
                     print(w_line)
@@ -108,6 +142,8 @@ def build_final_file():
                     ", " +
                     ", " +
                     ", " +
+                    ", " +
+                    ", " +
                     r.date
             )
             mf.write(w_line)
@@ -118,12 +154,14 @@ def build_final_file():
                     data.away + ", " +
                      ", " +
                      ", " +
-                    data.percent + ", " +
-                    data.attempts + ", " +
-                    data.more + ", " +
-                    data.def_percent + ", " +
-                    data.def_attempts + ", " +
-                    data.def_more + ", " +
+                    str(data.percent) + ", " +
+                    str(data.attempts) + ", " +
+                    str(data.more) + ", " +
+                    str(data.def_percent) + ", " +
+                    str(data.def_attempts) + ", " +
+                    str(data.def_more) + ", " +
+                    str(data.total_fields_won) + ", " +
+                    str(data.average_diff_fields) + ", " +
                     ", " +
                     ", " +
                     data.date + "\n"
@@ -213,11 +251,11 @@ def calculate_haslametrics():
     f.close()
 
 if __name__ == '__main__':
-    # scrape_bovada()
-    # scrape_haslametrics()
-    # scrape_covers()
-    #
-    # calculate_haslametrics()
+    scrape_bovada()
+    scrape_haslametrics()
+    scrape_covers()
+
+    calculate_haslametrics()
     build_final_file()
 
 
