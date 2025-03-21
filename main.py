@@ -1,41 +1,35 @@
-import string
+import datetime
 from dataclasses import dataclass, fields
 from difflib import SequenceMatcher
+from pathlib import Path
 
-from bovadaWebScraper import scrape_bovada
-from coversScraper import scrape_covers
-from haslametricsScraper import scrape_haslametrics
+from src.bovadaWebScraper import BovadaWebScraper
+from src.coversWebScraper import CoversWebScraper
+from obsolete_files.haslametricsScraper import scrape_haslametrics
+from src.data.bovadaData import BovadaData
 
-@dataclass
-class ResultsData:
-    home : str = ""
-    away : str = ""
-    winner : str = ""
-    cover : str = ""
-    total_bet : str = ""
-    total_by : str = ""
-    key_stats_p : str = ""
-    key_stats_a : str = ""
-    more_stats : str = ""
-    date : str = ""
+
+TODAYS_DATE = todays_date = datetime.datetime.now().strftime("%m-%d-%Y")
+
+covers_match_data = []
+bov_match_data = []
 
 @dataclass()
 class CoversData:
     home: str = ""
     away: str = ""
     percent: float = ""
-    attempts: float = ""
     more: float = ""
     def_percent: float = ""
-    def_attempts: float = ""
     def_more: float = ""
     total_fields_won: int = 0
     average_diff_fields: float = 0.0
-    total_data_fields= 6.0
+    total_data_fields= 4.0
+    home_pd : float = 0.0
+    away_pd : float = 0.0
+    total_opps : int = 0
     date : str = ""
 
-def similar(a : str , b : str ):
-    return SequenceMatcher(None, a, b).ratio()
 
 def calculate_covers_winner (data : CoversData):
     home_counter = 0
@@ -43,7 +37,7 @@ def calculate_covers_winner (data : CoversData):
     home_total = 0
     away_total = 0
     for field in fields(CoversData):
-        if field.type is float and  field.name != "average_diff_fields":
+        if field.type is float and  field.name != "average_diff_fields" and field.name != "home_pd" and field.name != "away_pd":
             if float(getattr(data, field.name)) > 0:
                 home_counter += 1
                 home_total += getattr(data, field.name)
@@ -60,68 +54,77 @@ def calculate_covers_winner (data : CoversData):
     average_diff = (abs(home_total - away_total) / data.total_data_fields) * winner
     data.average_diff_fields = average_diff
 
-
-
-
-
-
-
-def build_final_file():
-    results = []
-    with open("./output_files/has_bov.csv" , "r") as res_file:
-        res_file.readline()
-        for line in res_file:
-            result = ResultsData()
-            res_words = line.split(", ")
-            result.home = res_words[0]
-            result.away = res_words[1]
-            result.winner = res_words[2]
-            result.cover = res_words[3]
-            result.total_bet = res_words[4]
-            result.total_by = res_words[5]
-            result.date = res_words[6]
-            results.append(result)
-    mf = open("./output_files/final_results.csv" , "w")
-    headers = "Home, Away, Has-Metric Winner, H.M Cover By, Covers Percent, Covers Attempts, Covers More, Covers Def Percent, Covers Def Attempts, Covers Def More, Total Bet (Has), Total By (Has), Num Fields Won, Avg Diff, Date\n"
-    mf.write(headers)
-    cover_data = []
-    with open("./output_files/coversScrape.csv" , "r") as f:
+def read_covers_data():
+    todays_file = Path(f"./output_files/coversScrape{TODAYS_DATE}.csv")
+    if not todays_file.is_file():
+            print("No Covers File exist for Today : Attempting to Read")
+            return
+    with open(f"./output_files/coversScrape{TODAYS_DATE}.csv" , "r") as f:
         for line in f:
             data = CoversData()
             data_split = line.split(", ")
             data.home = data_split[0]
             data.away = data_split[1]
-            data.percent = float(data_split[2])
-            data.attempts = float(data_split[3])
-            data.more = float(data_split[4])
-            data.def_percent = float(data_split[5])
-            data.def_attempts = float(data_split[6])
-            data.def_more = float(data_split[7])
-            data.date = data_split[8]
+            data.home_pd = round(float(data_split[2]), 2)
+            data.away_pd = round(float(data_split[3]), 2)
+            data.total_opps = int(data_split[4])
+            data.percent = round(float(data_split[5]), 2)
+            data.more = round(float(data_split[6]), 2)
+            data.def_percent = round(float(data_split[7]), 2)
+            data.def_more = round(float(data_split[8]), 2)
+            data.date = data_split[9]
+            calculate_covers_winner(data)
+
+def build_final_file_nba():
+    results = []
+    with open(f"./output_files/bovadaScrape-NBA-{TODAYS_DATE}.csv" , "r") as bov_file:
+        for line in bov_file:
+            items = line.split(", ")
+            home_team = items[0]
+            home_spread = items[1]
+            away_team = items[2]
+            away_spread = items[3]
+            total = items[4]
+            date = items[5]
+            bovaData = BovadaData(date, home_team, away_team, home_spread, away_spread, total)
+            results.append(bovaData)
+    mf = open(f"./output_files/final_results-NBA-{TODAYS_DATE}.csv" , "w")
+    headers = "Home, Away, Num Fields Won, Avg Diff, Home Point Diff, Away Point Diff, Total Common Opps, Covers Percent, Covers More, Covers Def Percent, Covers Def More, Date\n"
+    mf.write(headers)
+    cover_data = []
+    with open(f"./output_files/coversScrape-NBA-{TODAYS_DATE}.csv" , "r") as f:
+        for line in f:
+            data = CoversData()
+            data_split = line.split(", ")
+            data.home = data_split[0]
+            data.away = data_split[1]
+            data.home_pd = round(float(data_split[2]), 2)
+            data.away_pd = round(float(data_split[3]), 2)
+            data.total_opps = int(data_split[4])
+            data.percent = round(float(data_split[5]), 2)
+            data.more = round(float(data_split[6]), 2)
+            data.def_percent = round(float(data_split[7]), 2)
+            data.def_more = round(float(data_split[8]), 2)
+            data.date = data_split[9]
             calculate_covers_winner(data)
             found_match = False
-            for r in results:
-                r_home = r.home.split("\t")[0]
-                r_away = r.away.split("\t")[0]
-                if data.home.lower() == r_home.lower() or data.away.lower() == r_away.lower():
+            r : BovadaData
+            for r  in results:
+                if data.home.lower() == r.home_team.lower() or data.away.lower() == r.away_team.lower():
                     w_line = (
-                        r.home + ", " +
-                        r.away + ", " +
-                        r.winner + ", " +
-                        r.cover + ", " +
-                        str(data.percent) + ", " +
-                        str(data.attempts) + ", " +
-                        str(data.more) + ", " +
-                        str(data.def_percent) + ", " +
-                        str(data.def_attempts) + ", " +
-                        str(data.def_more) + ", " +
-                        r.total_bet + ", " +
-                        r.total_by + ", " +
-                        str(data.total_fields_won) + ", " +
-                        str(data.average_diff_fields) + ", " +
-                        r.date
+                        r.home_team + "\t " + r.home_spread + "," + #col 1
+                        r.away_team + "\t" + r.away_spread + ", " + #col 2
+                        str(data.total_fields_won) + ", " + #col 3
+                        str(round(data.average_diff_fields,2)) + ", " + #col 4
+                        str(data.home_pd)  + ", " +
+                        str(data.away_pd)  + ", " +
+                        str(data.total_opps)  + ", " +
+                        str(data.percent) + ", " + #col 5
+                        str(data.more) + ", " + #col 7
+                        str(data.def_percent) + ", " + #col 8
+                        str(data.def_more) + ", " + #col 10
+                        r.date #col 13
                               )
-                    print(w_line)
                     mf.write(w_line)
                     results.remove(r)
                     found_match = True
@@ -130,11 +133,8 @@ def build_final_file():
     if len(cover_data) > 0:
         for r in results:
             w_line = (
-                    r.home + ", " +
-                    r.away + ", " +
-                    r.winner + ", " +
-                    r.cover + ", " +
-                    ", " +
+                    r.home_team + "\t " + r.home_spread + "," + #col 1
+                    r.away_team + "\t" + r.away_spread + ", " + #col 2
                     ", " +
                     ", " +
                     ", " +
@@ -147,116 +147,129 @@ def build_final_file():
                     r.date
             )
             mf.write(w_line)
-            results.remove(r)
         for data in cover_data:
             w_line = (
                     data.home + ", " +
                     data.away + ", " +
-                     ", " +
-                     ", " +
-                    str(data.percent) + ", " +
-                    str(data.attempts) + ", " +
-                    str(data.more) + ", " +
-                    str(data.def_percent) + ", " +
-                    str(data.def_attempts) + ", " +
-                    str(data.def_more) + ", " +
                     str(data.total_fields_won) + ", " +
                     str(data.average_diff_fields) + ", " +
-                    ", " +
-                    ", " +
+                    str(data.home_pd)+ ", " +
+                    str(data.away_pd) + ", " +
+                    str(data.total_opps) + ", " +
+                    str(data.percent) + ", " +
+                    str(data.more) + ", " +
+                    str(data.def_percent) + ", " +
+                    str(data.def_more) + ", " +
                     data.date + "\n"
                     )
             mf.write(w_line)
-    print("Dunzo")
+    mf.close()
 
-@dataclass
-class match:
-    homeTeam: str = ""
-    awayTeam: str = ""
-    homeSpread: str = ""
-    awaySpread: str = ""
-    hasHomeScore: float = 0
-    hasAwayScore: float = 0
-    total : str = ""
-    date: str = ""
-    teamCover : str = ""
-    coverBy : float = 0
-    has_total_bet : str = ""
-    has_total_by : float = 0.0
 
-    def calculate_cover(self):
-        if self.hasAwayScore and self.hasHomeScore:
-            h_cover_score = self.hasHomeScore + float(self.homeSpread)
-            a_cover_score = self.hasAwayScore + float(self.awaySpread)
-            predicted_total = self.hasHomeScore + self.hasAwayScore
-            home_cover = h_cover_score - self.hasAwayScore
-            away_cover = a_cover_score - self.hasHomeScore
-            if home_cover > 0 :
-                self.teamCover = self.homeTeam
-                self.coverBy = home_cover
-            else:
-                self.teamCover = self.awayTeam
-                self.coverBy = away_cover
-            if predicted_total > float(self.total) :
-                self.has_total_bet = "Over"
-                self.has_total_by = predicted_total - float(self.total)
-            else :
-                self.has_total_bet = "Under"
-                self.has_total_by = float(self.total) - predicted_total
-            print(self)
+def build_final_file_ncaab():
+    results = []
+    with open(f"./output_files/bovadaScrape-NCAAB-{TODAYS_DATE}.csv" , "r") as bov_file:
+        for line in bov_file:
+            items = line.split(", ")
+            home_team = items[0]
+            home_spread = items[1]
+            away_team = items[2]
+            away_spread = items[3]
+            total = items[4]
+            date = items[5]
+            bovaData = BovadaData(date, home_team, away_team, home_spread, away_spread, total)
+            results.append(bovaData)
+    mf = open(f"./output_files/final_results-NCAAB-{TODAYS_DATE}.csv" , "w")
+    headers = "Home, Away, Num Fields Won, Avg Diff, Home Point Diff, Away Point Diff, Total Common Opps, Covers Percent, Covers More, Covers Def Percent, Covers Def More, Date\n"
+    mf.write(headers)
+    cover_data = []
+    with open(f"./output_files/coversScrape-NCAAB-{TODAYS_DATE}.csv" , "r") as f:
+        for line in f:
+            data = CoversData()
+            data_split = line.split(", ")
+            data.home = data_split[0]
+            data.away = data_split[1]
+            data.home_pd = round(float(data_split[2]), 2)
+            data.away_pd = round(float(data_split[3]), 2)
+            data.total_opps = int(data_split[4])
+            data.percent = round(float(data_split[5]), 2)
+            data.more = round(float(data_split[6]), 2)
+            data.def_percent = round(float(data_split[7]), 2)
+            data.def_more = round(float(data_split[8]), 2)
+            data.date = data_split[9]
+            calculate_covers_winner(data)
+            found_match = False
+            r : BovadaData
+            for r  in results:
+                if data.home.lower() == r.home_team.lower() or data.away.lower() == r.away_team.lower():
+                    w_line = (
+                        r.home_team + "\t " + r.home_spread + "," + #col 1
+                        r.away_team + "\t" + r.away_spread + ", " + #col 2
+                        str(data.total_fields_won) + ", " + #col 3
+                        str(round(data.average_diff_fields,2)) + ", " + #col 4
+                        str(data.home_pd)  + ", " +
+                        str(data.away_pd)  + ", " +
+                        str(data.total_opps)  + ", " +
+                        str(data.percent) + ", " + #col 5
+                        str(data.more) + ", " + #col 7
+                        str(data.def_percent) + ", " + #col 8
+                        str(data.def_more) + ", " + #col 10
+                        r.date #col 13
+                              )
+                    mf.write(w_line)
+                    results.remove(r)
+                    found_match = True
+            if not found_match:
+                cover_data.append(data)
+    if len(cover_data) > 0:
+        for r in results:
+            w_line = (
+                    r.home_team + "\t " + r.home_spread + "," + #col 1
+                    r.away_team + "\t" + r.away_spread + ", " + #col 2
+                    ", " +
+                    ", " +
+                    ", " +
+                    ", " +
+                    ", " +
+                    ", " +
+                    ", " +
+                    ", " +
+                    ", " +
+                    r.date
+            )
+            mf.write(w_line)
+        for data in cover_data:
+            w_line = (
+                    data.home + ", " +
+                    data.away + ", " +
+                    str(data.total_fields_won) + ", " +
+                    str(data.average_diff_fields) + ", " +
+                    str(data.home_pd)+ ", " +
+                    str(data.away_pd) + ", " +
+                    str(data.total_opps) + ", " +
+                    str(data.percent) + ", " +
+                    str(data.more) + ", " +
+                    str(data.def_percent) + ", " +
+                    str(data.def_more) + ", " +
+                    data.date + "\n"
+                    )
+            mf.write(w_line)
+    mf.close()
 
-def calculate_haslametrics():
-    with open("./output_files/bovadaOdds.txt") as file:
-        count = 1
-        matches = []
-        m = match()
-        for line in file:
-            items = line.split("\t")
-            match count:
-                case 1:
-                    m.awayTeam= items[0]
-                    m.awaySpread = items[1]
-                case 2:
-                    m.homeTeam = items[0]
-                    m.homeSpread = items[1]
-                case 3:
-                    m.total = items[0].strip()
-                case 4:
-                    m.date = items[0]
-            if count == 4:
-                matches.append(m)
-                m = match()
-                count = 1
-            else :
-                count += 1
 
-    with open("./output_files/haslametricsScrape.txt") as file:
-        count = 1
-        while True:
-            home = file.readline()
-            away = file.readline()
-            if not away: break
-            home = home.split("\t")
-            away = away.split("\t")
-            for m in matches:
-                if home[0] == m.homeTeam or away[0] == m.awayTeam :
-                    m.hasHomeScore = float(home[1].rstrip())
-                    m.hasAwayScore = float(away[1].rstrip())
-
-    f = open("./output_files/has_bov.csv", "w")
-    f.write("Home Team, Away Team, Team ATS, ATS Amount, Total Bet, Total Cover By, Date\n")
-    for m in matches:
-        m.calculate_cover()
-        f.write(m.homeTeam + "\t" + m.homeSpread + ", " + m.awayTeam + "\t" + m.awaySpread + ", "  +  m.teamCover + ", " + str(m.coverBy) + ", " + m.has_total_bet + ", " + str(m.has_total_by) + ", " + m.date )
-    f.close()
 
 if __name__ == '__main__':
-    scrape_bovada()
-    scrape_haslametrics()
-    scrape_covers()
+    leagues_to_scrape = ["NCAAB", "NBA"]
+    bovscraper = BovadaWebScraper(leagues_to_scrape)
+    covscraper = CoversWebScraper(leagues_to_scrape)
 
-    calculate_haslametrics()
-    build_final_file()
+    # read_covers_data()
+    # read_bovada_data()
+
+
+
+    build_final_file_ncaab()
+    build_final_file_nba()
 
 
 

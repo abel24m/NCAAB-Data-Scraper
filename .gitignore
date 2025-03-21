@@ -1,6 +1,7 @@
 #Compiled Source#
 ########################
 *.pyc
+*.log
 
 
 #Directories To Ignore#
@@ -14,5 +15,7 @@ output_files/
 #############################
 .DS_Store
 .idea
+.vscode
+.venv
 
 
